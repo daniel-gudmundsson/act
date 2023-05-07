@@ -230,7 +230,8 @@ class InsertionTask(BimanualViperXTask):
 
 
 def get_action(master_bot_left, master_bot_right):
-    action = np.zeros(14)
+    # action = np.zeros(14)
+    action = np.zeros(4)
     # arm action
     action[:6] = master_bot_left.dxl.joint_states.position[:6]
     action[7:7+6] = master_bot_right.dxl.joint_states.position[:6]

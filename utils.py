@@ -3,9 +3,74 @@ import torch
 import os
 import h5py
 from torch.utils.data import TensorDataset, DataLoader
+import rosbag
+import cv2
+import pickle
 
 import IPython
 e = IPython.embed
+
+class VisionDataset(torch.utils.data.Dataset):
+    def __init__(self, data_dir, indices):
+        super(VisionDataset).__init__()
+        self.indices = indices
+        self.max_epi_action = (200, 4)
+        with open(data_dir, "rb") as f:
+            self.data_list = pickle.load(f)
+
+        # TODO: normalization with stats.pickle
+        # self.norm_stats =
+
+    def __len__(self):
+        return len(self.indices)
+
+    def __getitem__(self, index):
+        sample_full_episode = False
+
+        epi_idx = self.indices[index]
+
+        epi_dict = self.data_list[epi_idx]
+        original_action_shape = epi_dict["actions"].shape
+        episode_len = original_action_shape[0]
+        if sample_full_episode:
+            start_ts = 0
+        else:
+            start_ts = np.random.choice(episode_len)
+
+        # get observation at start_ts only
+        obs = epi_dict["observations"][start_ts]
+        image_name = epi_dict["images"][start_ts]["name"]
+        image = epi_dict["images"][start_ts]["content"]
+        image = np.array(image)
+        image = np.rot90(image, k=1)
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        # reshape to 480x640x3
+        image = cv2.resize(image, (640, 480))
+        # print('image shape', image.shape)
+        image = torch.from_numpy(image).float()
+        image = torch.einsum('h w c -> c h w', image)
+
+        # normalize image and change dtype to float
+        image = image / 255.0
+
+        # TODO: Use image_name to sample from augmented images
+
+        # print('action', epi_dict["actions"])
+        action = epi_dict["actions"][start_ts:]
+        action_len = episode_len - start_ts
+
+        padded_action = np.zeros(self.max_epi_action, dtype=np.float32)
+        padded_action[:action_len] = action
+        is_pad = np.zeros(self.max_epi_action[0])
+        is_pad[action_len:] = 1
+
+        obs_data = torch.from_numpy(obs).float()
+        action_data = torch.from_numpy(padded_action).float()
+        is_pad = torch.from_numpy(is_pad).bool()
+
+        # TODO: Can normalize here using stats
+        # image = np.zeros_like(image)
+        return image, obs_data, action_data, is_pad
 
 class EpisodicDataset(torch.utils.data.Dataset):
     def __init__(self, episode_ids, dataset_dir, camera_names, norm_stats):
@@ -47,9 +112,12 @@ class EpisodicDataset(torch.utils.data.Dataset):
                 action = root['/action'][max(0, start_ts - 1):] # hack, to make timesteps more aligned
                 action_len = episode_len - max(0, start_ts - 1) # hack, to make timesteps more aligned
 
+        # print('action', action)
         self.is_sim = is_sim
         padded_action = np.zeros(original_action_shape, dtype=np.float32)
         padded_action[:action_len] = action
+        print('action_len', action_len)
+        # print('padded_action', padded_action)
         is_pad = np.zeros(episode_len)
         is_pad[action_len:] = 1
 
@@ -59,6 +127,7 @@ class EpisodicDataset(torch.utils.data.Dataset):
             all_cam_images.append(image_dict[cam_name])
         all_cam_images = np.stack(all_cam_images, axis=0)
 
+        # print('all_cam_images', all_cam_images.shape)
         # construct observations
         image_data = torch.from_numpy(all_cam_images)
         qpos_data = torch.from_numpy(qpos).float()
@@ -73,8 +142,10 @@ class EpisodicDataset(torch.utils.data.Dataset):
         action_data = (action_data - self.norm_stats["action_mean"]) / self.norm_stats["action_std"]
         qpos_data = (qpos_data - self.norm_stats["qpos_mean"]) / self.norm_stats["qpos_std"]
 
-        return image_data, qpos_data, action_data, is_pad
+        # print('action_data', action_data.shape)
+        # print('is_pad', is_pad)
 
+        return image_data, qpos_data, action_data, is_pad
 
 def get_norm_stats(dataset_dir, num_episodes):
     all_qpos_data = []
@@ -107,6 +178,24 @@ def get_norm_stats(dataset_dir, num_episodes):
 
     return stats
 
+def load_data2(dataset_dir, batch_size_train, batch_size_val):
+    print(f"\nData from: {dataset_dir}")
+    with open(dataset_dir, "rb") as f:
+        data = pickle.load(f)
+        num_epis = len(data)
+
+    train_ratio = 0.95
+    shuffled_indices = np.random.permutation(num_epis)
+    train_indices = shuffled_indices[:int(train_ratio * num_epis)]
+    val_indices = shuffled_indices[int(train_ratio * num_epis):]
+
+    train_dataset = VisionDataset(dataset_dir, train_indices)
+    train_dataloader = DataLoader(train_dataset, batch_size=batch_size_train, shuffle=True, pin_memory=True)
+    val_dataset = VisionDataset(dataset_dir, val_indices)
+    val_dataloader = DataLoader(val_dataset, batch_size=batch_size_val, shuffle=True, pin_memory=True)
+
+    return train_dataloader, val_dataloader, None, True
+
 
 def load_data(dataset_dir, num_episodes, camera_names, batch_size_train, batch_size_val):
     print(f'\nData from: {dataset_dir}\n')
@@ -122,6 +211,8 @@ def load_data(dataset_dir, num_episodes, camera_names, batch_size_train, batch_s
     # construct dataset and dataloader
     train_dataset = EpisodicDataset(train_indices, dataset_dir, camera_names, norm_stats)
     val_dataset = EpisodicDataset(val_indices, dataset_dir, camera_names, norm_stats)
+    # train_dataset = EpisodicDatasetHeap(train_indices, dataset_dir, norm_stats)
+    # val_dataset = EpisodicDatasetHeap(val_indices, dataset_dir, norm_stats)
     train_dataloader = DataLoader(train_dataset, batch_size=batch_size_train, shuffle=True, pin_memory=True, num_workers=1, prefetch_factor=1)
     val_dataloader = DataLoader(val_dataset, batch_size=batch_size_val, shuffle=True, pin_memory=True, num_workers=1, prefetch_factor=1)
 
