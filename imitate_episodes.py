@@ -318,9 +318,9 @@ def eval_bc(config, ckpt_name, save_episode=True):
     return success_rate, avg_return
 
 def forward_pass2(data, policy):
-    image_data, action_data, is_pad = data
-    image_data, action_data, is_pad = image_data.cuda(), action_data.cuda(), is_pad.cuda()
-    return policy(None, image_data, action_data, is_pad) # TODO remove None
+    image_data, obs, action_data, is_pad = data
+    image_data, obs, action_data, is_pad = image_data.cuda(), obs.cuda(), action_data.cuda(), is_pad.cuda()
+    return policy(obs, image_data, action_data, is_pad) # TODO remove None
 
 def forward_pass(data, policy):
     image_data, qpos_data, action_data, is_pad = data

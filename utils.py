@@ -38,7 +38,7 @@ class VisionDataset(torch.utils.data.Dataset):
             start_ts = np.random.choice(episode_len)
 
         # get observation at start_ts only
-        # obs = epi_dict["observations"][start_ts]
+        obs = epi_dict["observations"][start_ts]
         image_name = epi_dict["images"][start_ts]["name"]
         image = epi_dict["images"][start_ts]["content"]
         # check if augmented images exst as a key
@@ -74,14 +74,13 @@ class VisionDataset(torch.utils.data.Dataset):
         is_pad = np.zeros(self.max_epi_action[0])
         is_pad[action_len:] = 1
 
-        # obs_data = torch.from_numpy(obs).float()
+        obs_data = torch.from_numpy(obs).float()
         action_data = torch.from_numpy(padded_action).float()
         is_pad = torch.from_numpy(is_pad).bool()
-        # action_data = (action_data - self.norm_stats["action_mean"]) / self.norm_stats["action_std"]
 
         # TODO: Can normalize here using stats
         # image = np.zeros_like(image)
-        return image, action_data, is_pad
+        return image, obs_data, action_data, is_pad
 
 class EpisodicDataset(torch.utils.data.Dataset):
     def __init__(self, episode_ids, dataset_dir, camera_names, norm_stats):
