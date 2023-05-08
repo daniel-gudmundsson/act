@@ -317,10 +317,10 @@ def eval_bc(config, ckpt_name, save_episode=True):
 
     return success_rate, avg_return
 
-# def forward_pass2(data, policy):
-#     obs_data, action_data, is_pad = data
-#     obs_data, action_data, is_pad = obs_data.cuda(), action_data.cuda(), is_pad.cuda()
-#     return policy(obs_data, None, action_data, is_pad) # TODO remove None
+def forward_pass2(data, policy):
+    image_data, action_data, is_pad = data
+    image_data, action_data, is_pad = image_data.cuda(), action_data.cuda(), is_pad.cuda()
+    return policy(None, image_data, action_data, is_pad) # TODO remove None
 
 def forward_pass(data, policy):
     image_data, qpos_data, action_data, is_pad = data
@@ -356,7 +356,7 @@ def train_bc(train_dataloader, val_dataloader, config):
             epoch_dicts = []
             for batch_idx, data in enumerate(val_dataloader):
                 # forward_dict = forward_pass(data, policy)
-                forward_dict = forward_pass(data, policy)
+                forward_dict = forward_pass2(data, policy)
                 epoch_dicts.append(forward_dict)
             epoch_summary = compute_dict_mean(epoch_dicts)
             validation_history.append(epoch_summary)
@@ -377,7 +377,7 @@ def train_bc(train_dataloader, val_dataloader, config):
         optimizer.zero_grad()
         for batch_idx, data in enumerate(train_dataloader):
             # forward_dict = forward_pass(data, policy)
-            forward_dict = forward_pass(data, policy)
+            forward_dict = forward_pass2(data, policy)
             # backward
             loss = forward_dict['loss']
             loss.backward()

@@ -38,14 +38,24 @@ class VisionDataset(torch.utils.data.Dataset):
             start_ts = np.random.choice(episode_len)
 
         # get observation at start_ts only
-        obs = epi_dict["observations"][start_ts]
+        # obs = epi_dict["observations"][start_ts]
         image_name = epi_dict["images"][start_ts]["name"]
         image = epi_dict["images"][start_ts]["content"]
+        # check if augmented images exst as a key
+        num_augmented_images = len(epi_dict["images"][start_ts]["augmented_images"]) if "augmented_images" in epi_dict["images"][start_ts] else 0 
+        if "augmented_images" in epi_dict["images"][start_ts]:
+            num_augmented_images = len(epi_dict["images"][start_ts]["augmented_images"])
+            images = [image].extend([epi_dict["images"][start_ts]["augmented_images"][i]['content'] for i in range(num_augmented_images)])
+            image = np.random.choice(images)
+        # sample from images
         image = np.array(image)
-        image = np.rot90(image, k=1)
-        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        # image = np.rot90(image, k=1)
+        # image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        image = cv2.cvtColor(image, cv2.IMREAD_COLOR)
         # reshape to 480x640x3
         image = cv2.resize(image, (640, 480))
+        # save image
+        # cv2.imwrite('test.png', image)
         # print('image shape', image.shape)
         image = torch.from_numpy(image).float()
         image = torch.einsum('h w c -> c h w', image)
@@ -64,13 +74,14 @@ class VisionDataset(torch.utils.data.Dataset):
         is_pad = np.zeros(self.max_epi_action[0])
         is_pad[action_len:] = 1
 
-        obs_data = torch.from_numpy(obs).float()
+        # obs_data = torch.from_numpy(obs).float()
         action_data = torch.from_numpy(padded_action).float()
         is_pad = torch.from_numpy(is_pad).bool()
+        # action_data = (action_data - self.norm_stats["action_mean"]) / self.norm_stats["action_std"]
 
         # TODO: Can normalize here using stats
         # image = np.zeros_like(image)
-        return image, obs_data, action_data, is_pad
+        return image, action_data, is_pad
 
 class EpisodicDataset(torch.utils.data.Dataset):
     def __init__(self, episode_ids, dataset_dir, camera_names, norm_stats):
