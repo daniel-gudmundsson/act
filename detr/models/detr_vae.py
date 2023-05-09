@@ -69,8 +69,8 @@ class DETRVAE(nn.Module):
         self.encoder_action_proj = nn.Linear(act_dim, hidden_dim) # project action to embedding
         self.encoder_obs_proj = nn.Linear(state_dim, hidden_dim)  # project obs to embedding
         self.latent_proj = nn.Linear(hidden_dim, self.latent_dim*2) # project hidden state to latent std, var
-        self.register_buffer('pos_table', get_sinusoid_encoding_table(1+1+num_queries, hidden_dim)) # [CLS], obs, a_seq
-        # self.register_buffer('pos_table', get_sinusoid_encoding_table(1+num_queries, hidden_dim)) # [CLS], obs, a_seq
+        # self.register_buffer('pos_table', get_sinusoid_encoding_table(1+1+num_queries, hidden_dim)) # [CLS], obs, a_seq
+        self.register_buffer('pos_table', get_sinusoid_encoding_table(1+num_queries, hidden_dim)) # [CLS], obs, a_seq
 
         # decoder extra parameters
         self.latent_out_proj = nn.Linear(self.latent_dim, hidden_dim) # project latent sample to embedding
@@ -89,24 +89,24 @@ class DETRVAE(nn.Module):
         # print('actions', actions)
         # print('is_pad', is_pad)
         is_training = actions is not None # train or val
-        bs, _ = obs.shape
-        # bs, _, _, _ = image.shape
+        # bs, _ = obs.shape
+        bs, _, _, _ = image.shape
         ### Obtain latent z from action sequence
         if is_training:
             # project action sequence to embedding dim, and concat with a CLS token
             action_embed = self.encoder_action_proj(actions) # (bs, seq, hidden_dim)
-            obs_embed = self.encoder_obs_proj(obs)  # (bs, hidden_dim)
-            obs_embed = torch.unsqueeze(obs_embed, axis=1)  # (bs, 1, hidden_dim)
+            # obs_embed = self.encoder_obs_proj(obs)  # (bs, hidden_dim)
+            # obs_embed = torch.unsqueeze(obs_embed, axis=1)  # (bs, 1, hidden_dim)
             cls_embed = self.cls_embed.weight # (1, hidden_dim) # TODO: What does cls mean again?
             cls_embed = torch.unsqueeze(cls_embed, axis=0).repeat(bs, 1, 1) # (bs, 1, hidden_dim)
-            encoder_input = torch.cat([cls_embed, obs_embed, action_embed], axis=1) # (bs, seq+1, hidden_dim)
-            # encoder_input = torch.cat([cls_embed, action_embed], axis=1) # (bs, seq+1, hidden_dim)
+            # encoder_input = torch.cat([cls_embed, obs_embed, action_embed], axis=1) # (bs, seq+1, hidden_dim)
+            encoder_input = torch.cat([cls_embed, action_embed], axis=1) # (bs, seq+1, hidden_dim)
             # encoder_input = torch.cat([action_embed], axis=1) # (bs, seq+1, hidden_dim)
             # encoder_input = encoder_input.permute(1, 0) # (seq+1, bs, hidden_dim)
             encoder_input = encoder_input.permute(1, 0, 2) # (seq+1, bs, hidden_dim)
             # do not mask cls token
-            cls_joint_is_pad = torch.full((bs, 2), False).to(obs.device) # False: not a padding
-            # cls_joint_is_pad = torch.full((bs, 1), False).to(image.device) # False: not a padding
+            # cls_joint_is_pad = torch.full((bs, 2), False).to(obs.device) # False: not a padding
+            cls_joint_is_pad = torch.full((bs, 1), False).to(image.device) # False: not a padding
             # print('cls_joint_is_pad', cls_joint_is_pad.shape)
             is_pad = torch.cat([cls_joint_is_pad, is_pad], axis=1)  # (bs, seq+1)
             # print('is_pad', is_pad.shape)
@@ -141,8 +141,8 @@ class DETRVAE(nn.Module):
             all_cam_features.append(self.input_proj(features))
             all_cam_pos.append(pos)
             # proprioception features
-            proprio_input = self.input_proj_robot_state(obs)
-            # proprio_input = None
+            # proprio_input = self.input_proj_robot_state(obs)
+            proprio_input = None
             # fold camera dimension into width dimension
             src = torch.cat(all_cam_features, axis=3)
             # print('src', src.shape)

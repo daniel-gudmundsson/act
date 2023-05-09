@@ -199,6 +199,7 @@ def load_data2(dataset_dir, batch_size_train, batch_size_val):
     train_indices = shuffled_indices[:int(train_ratio * num_epis)]
     val_indices = shuffled_indices[int(train_ratio * num_epis):]
 
+    print('train_indices', train_indices)
     train_dataset = VisionDataset(dataset_dir, train_indices)
     train_dataloader = DataLoader(train_dataset, batch_size=batch_size_train, shuffle=True, pin_memory=True)
     val_dataset = VisionDataset(dataset_dir, val_indices)

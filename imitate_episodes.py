@@ -7,6 +7,8 @@ import matplotlib.pyplot as plt
 from copy import deepcopy
 from tqdm import tqdm
 from einops import rearrange
+import torch.optim as optim
+import torch.optim.lr_scheduler as lr_scheduler
 
 from constants import DT
 from constants import PUPPET_GRIPPER_JOINT_OPEN
@@ -375,15 +377,25 @@ def train_bc(train_dataloader, val_dataloader, config):
         # training
         policy.train()
         optimizer.zero_grad()
+        # scheduler = lr_scheduler.StepLR(optimizer, step_size=500, gamma=0.1)
+
+        c = 0 
         for batch_idx, data in enumerate(train_dataloader):
+            c+=1
+            bs = data[0].shape[0]
+            # print('batch_idx', batch_idx, 'bs', bs)
             # forward_dict = forward_pass(data, policy)
             forward_dict = forward_pass2(data, policy)
             # backward
             loss = forward_dict['loss']
             loss.backward()
             optimizer.step()
+
             optimizer.zero_grad()
             train_history.append(detach_dict(forward_dict))
+            # scheduler.step()
+        # print('scheduler.get_last_lr()', scheduler.get_last_lr())
+        # print('Num samples in train dataloader', c)
         epoch_summary = compute_dict_mean(train_history[(batch_idx+1)*epoch:(batch_idx+1)*(epoch+1)])
         epoch_train_loss = epoch_summary['loss']
         train_losses.append(epoch_train_loss)
